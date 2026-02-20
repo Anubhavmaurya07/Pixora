@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(uuid())
+  username       String   @unique
+  email          String   @unique
+  password       String
+  bio            String?
+  profilePic     String?
+  followersCount Int      @default(0)
+  followingCount Int      @default(0)
+  posts          Post[]
+  createdAt      DateTime @default(now())
+
+  followers Follow[] @relation("followers")
+  following Follow[] @relation("following")
+
+  likes    Like[]
+  comments Comment[]
+
+  notificationsRecieved Notification[] @relation("UserNotifications")
+  notificationsSent     Notification[] @relation("ActorNotifications")
+}
+
+model Post {
+  id            String   @id @default(uuid())
+  caption       String?
+  imageUrl      String
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  likesCount    Int      @default(0)
+  commentsCount Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  likes         Like[]
+  comments      Comment[]
+  notifications Notification[]
+
+  @@index([userId, createdAt])
+  @@index([createdAt, id])
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("following", fields: [followerId], references: [id])
+  following User @relation("followers", fields: [followingId], references: [id])
+
+  @@unique([followerId, followingId])
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  post Post @relation(fields: [postId], references: [id])
+
+  @@unique([userId, postId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  text      String
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  post Post @relation(fields: [postId], references: [id])
+
+  @@index([postId])
+}
+
+model Notification {
+  id         String           @id @default(uuid())
+  receiverId String
+  actorId    String
+  type       NotificationType
+  postId     String?
+  read       Boolean          @default(false)
+  createdAt  DateTime         @default(now())
+  // Relations
+  receiver   User             @relation("UserNotifications", fields: [receiverId], references: [id])
+  actor      User             @relation("ActorNotifications", fields: [actorId], references: [id])
+  post       Post?            @relation(fields: [postId], references: [id])
+
+  @@index([receiverId, createdAt])
+  @@index([actorId])
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+}
