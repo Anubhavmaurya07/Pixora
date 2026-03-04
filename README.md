@@ -1,43 +1,84 @@
 # 🪄 **Pixora – Modern Social Media Backend**
 
-Pixora is a **scalable Node.js + Prisma + PostgreSQL** backend that powers a full-fledged social media experience — complete with **authentication, posts, likes, comments, follows, a personalized feed with cursor pagination, and real-time-ready notifications**.
+Pixora is a **scalable Node.js + Prisma + PostgreSQL** backend powering a modern social media experience — complete with **authentication, posts, likes, comments, follows, personalized feed with cursor pagination, and background job notifications**.
+
+Built for performance and scalability, Pixora integrates **Redis caching** and a **BullMQ job queue** to handle heavy background tasks asynchronously — making it production-ready for large-scale workloads.
 
 ---
 
 ## 🚀 **Tech Stack**
 
-| Layer                    | Technology            |
-| ------------------------ | --------------------- |
-| Language                 | Node.js (Express)     |
-| ORM                      | Prisma                |
-| Database                 | PostgreSQL            |
-| Auth                     | JWT (JSON Web Tokens) |
-| Cache / Queue (optional) | Redis + BullMQ        |
-| Real-time (optional)     | Socket.IO             |
-| Cloud-ready              | Dockerized setup      |
+| Layer                | Technology            |
+| -------------------- | --------------------- |
+| Language             | Node.js (Express)     |
+| ORM                  | Prisma                |
+| Database             | PostgreSQL (Neon)     |
+| Auth                 | JWT (JSON Web Tokens) |
+| Cache / Queue        | **Redis + BullMQ**    |
+| Background Jobs      | BullMQ Worker System  |
+| Real-time (optional) | Socket.IO             |
+| Cloud-ready          | Dockerized setup      |
 
 ---
 
-## ⚙️ **Features**
+## ⚙️ **Core Features**
 
-### 🧩 Core
+### 🧩 Application Logic
 
-* 🔐 **User Authentication** (JWT-based login/register)
-* 👤 **Follow System** (followers / following counts)
-* 📝 **Posts CRUD** (create, edit, delete, fetch)
-* ❤️ **Like System** with toggle + atomic transactions
+* 🔐 **User Authentication** (JWT-based)
+* 👤 **Follow System** (followers / following)
+* 📝 **Posts CRUD** (create, edit, delete, feed)
+* ❤️ **Likes** with atomic transaction safety
 * 💬 **Comments** with pagination
-* 🧭 **Infinite Feed** using cursor pagination (Instagram-style)
-* 🔔 **Notification System** (like, comment, follow)
+* 🧭 **Feed Pagination** using cursor strategy
+* 🔔 **Notification System** (async via BullMQ Queue)
 
-### ⚡ Advanced (Scalability Ready)
+---
 
-* 🧱 Transaction-safe like toggles via Prisma `$transaction`
-* 🚦 Pagination cursor encoding/decoding
-* 📦 Modular folder structure (`repository`, `service`, `controller`, `routes`)
-* 🔥 Built for **real-time integration** (Socket.IO or Web Push)
-* 💾 Ready for Redis caching layer
-* 🧰 Background job queue compatible (BullMQ)
+## ⚡ **Background Jobs with BullMQ + Redis**
+
+Pixora processes heavy operations like notifications asynchronously via **BullMQ**, powered by **Redis**.
+This ensures that user requests are never delayed — notifications, cache updates, and analytics all run in the background.
+
+### ⚙️ Architecture
+
+```
+Client → API (Express) → BullMQ Queue → Redis → Worker → Notification Service
+```
+
+### ✅ Use Cases
+
+* Like / Comment / Follow notifications
+* Feed cache invalidation
+* Email & push notifications (future-ready)
+* Heavy async tasks (e.g., activity analytics)
+
+### 🧠 Example (Notification Queue)
+
+```js
+await addNotificationJob({
+  receiverId: post.userId,
+  actorId,
+  type: NotificationType.LIKE,
+  postId: post.id,
+});
+```
+
+---
+
+## 💾 **Caching Layer (Redis)**
+
+Redis is configured as a shared service for:
+
+* BullMQ communication
+* Caching of posts, feed results, or session data (optional)
+
+**Supports both local and cloud Redis providers:**
+
+* ✅ Upstash (serverless & free tier)
+* ✅ Redis Cloud
+* ✅ Render Redis
+* ✅ AWS ElastiCache
 
 ---
 
@@ -46,7 +87,8 @@ Pixora is a **scalable Node.js + Prisma + PostgreSQL** backend that powers a ful
 ```
 src/
  ├── config/
- │   └── prisma.js
+ │   ├── prisma.js
+ │   └── redis.js             # Shared Redis connection
  │
  ├── modules/
  │   ├── auth/
@@ -57,6 +99,10 @@ src/
  │   ├── follows/
  │   ├── feed/
  │   ├── notifications/
+ │   │    ├── notification.service.js
+ │   │    ├── notification.queue.js
+ │   │    └── workers/
+ │   │         └── notification.worker.js
  │   └── ...
  │
  ├── utils/
@@ -71,95 +117,88 @@ src/
 
 ## 🧠 **Database Schema Overview**
 
-### User
+### 🧾 Notification Table (New)
 
-* `followers`, `following`, `posts`
-* `notificationsReceived`, `notificationsSent`
-
-### Post
-
-* `likes`, `comments`, `notifications`
-
-### Notification
-
-* Type enum: `LIKE`, `COMMENT`, `FOLLOW`
-* Linked to both `actor` (trigger) and `receiver` (target)
-
-### Like
-
-* Unique compound key: `(userId, postId)`
+| Field        | Type     | Description                 |
+| ------------ | -------- | --------------------------- |
+| `id`         | String   | Unique identifier           |
+| `receiverId` | String   | User receiving notification |
+| `actorId`    | String   | User performing the action  |
+| `type`       | Enum     | `LIKE`, `COMMENT`, `FOLLOW` |
+| `postId`     | String?  | Linked post (optional)      |
+| `createdAt`  | DateTime | Timestamp                   |
+| `read`       | Boolean  | Mark as read/unread         |
 
 ---
 
-## 🔥 **Feed Pagination Logic**
+## 🔔 **Notification System (Async via BullMQ)**
 
-Pixora uses **cursor-based pagination** instead of offset-based for performance.
+Notifications are now queued instantly and processed in the background for speed and scalability.
+
+### Workflow:
 
 ```
-/feed?limit=10&cursor=<encodedCursor>
+1️⃣ User likes a post → addNotificationJob()
+2️⃣ Job stored in Redis (BullMQ Queue)
+3️⃣ Worker picks up the job
+4️⃣ createNotification() executes in background
+5️⃣ Notification stored in PostgreSQL
 ```
 
-Each cursor encodes the last visible post’s `{ createdAt, id }` and ensures no duplicates or skips — just like Instagram’s feed scrolling.
+### Worker Example
+
+```js
+const worker = new Worker(
+  "notifications",
+  async (job) => {
+    const { receiverId, actorId, type, postId } = job.data;
+    await createNotification({ receiverId, actorId, type, postId });
+  },
+  { connection: redis }
+);
+```
 
 ---
 
-## 💌 **Notifications**
+## ⚙️ **Environment Variables**
 
-Triggered automatically when:
-
-* Someone likes your post
-* Someone comments on your post
-* Someone follows you
-
-Supports:
-
-* Fetch API (`GET /notifications`)
-* Mark as read (`PUT /notifications/read`)
-
-Easily extendable to:
-
-* WebSockets (real-time)
-* Redis pub/sub
-* Web Push (FCM)
-
----
-
-## 🧱 **Environment Variables**
-
-```
-DATABASE_URL=postgresql://user:password@localhost:5432/pixora
+```env
+DATABASE_URL=postgresql://user:password@your-neon-db.neon.tech/pixora?sslmode=require
 JWT_SECRET=your_jwt_secret
 PORT=5000
+REDIS_URL=rediss://default:password@your-upstash-db.upstash.io:6379
 ```
 
 ---
 
 ## 🧰 **Scripts**
 
-| Command                  | Description              |
-| ------------------------ | ------------------------ |
-| `npm install`            | Install dependencies     |
-| `npx prisma migrate dev` | Apply DB migrations      |
-| `npm run dev`            | Start development server |
-| `npm run build`          | Build for production     |
+| Command                                                         | Description              |
+| --------------------------------------------------------------- | ------------------------ |
+| `npm install`                                                   | Install dependencies     |
+| `npx prisma migrate dev`                                        | Apply Prisma migrations  |
+| `npm run dev`                                                   | Start development server |
+| `node src/modules/notifications/workers/notification.worker.js` | Run background worker    |
+| `npx prisma studio`                                             | Open Prisma data browser |
 
 ---
 
 ## 🧠 **Scalability Roadmap**
 
-| Stage     | Feature                                                  |
-| --------- | -------------------------------------------------------- |
-| ✅ Done    | Auth, CRUD, Feed, Likes, Comments, Notifications         |
-| 🚧 Next   | Real-time updates via Socket.IO                          |
-| 🚀 Soon   | Redis caching & Background jobs                          |
-| 🌐 Future | Image uploads (S3/Cloudinary), Explore algorithm, Search |
+| Stage     | Feature                                                    |
+| --------- | ---------------------------------------------------------- |
+| ✅ Done    | Auth, Posts, Likes, Comments, Follows, Feed, Notifications |
+| ✅ Done    | Background Jobs (BullMQ + Redis)                           |
+| 🚧 Next   | Real-time updates (Socket.IO / WebSockets)                 |
+| 🚀 Soon   | Redis caching for feeds & explore                          |
+| 🌐 Future | Image uploads (S3/Cloudinary), Explore algorithm, Search   |
 
 ---
 
 ## 🧑‍💻 **Author**
 
 👋 **Anubhav** — Full Stack Developer
-Focused on building modern, scalable web apps with React, Node.js, and DevOps excellence.
+Focused on building modern, scalable systems with Node.js, React, and DevOps.
 
 > *“Code. Scale. Automate. Repeat.”*
 
