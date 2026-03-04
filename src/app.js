@@ -10,6 +10,7 @@ const likeRouter = require("./modules/likes/like.routes");
 const followRouter = require("./modules/follow/follow.routes");
 const feedRouter = require("./modules/feed/feed.routes");
 const notificationRouter = require("./modules/notifications/notification.routes");
+const chatRouter = require("./modules/chat/chat.routes");
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use("/api/comments", commentRouter);
 app.use("/api/follow", followRouter);
 app.use("/api/feed", feedRouter);
 app.use("/api/notification", notificationRouter);
+app.use("/api/chat", chatRouter)
 
 app.use(errorHandler);
 

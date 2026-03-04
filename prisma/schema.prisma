@@ -27,8 +27,11 @@ model User {
 
   notificationsRecieved Notification[] @relation("UserNotifications")
   notificationsSent     Notification[] @relation("ActorNotifications")
-}
 
+  chat     ChatUser[]
+  messages Message[]  @relation("MessageSender")
+}
+   
 model Post {
   id            String   @id @default(uuid())
   caption       String?
@@ -105,4 +108,47 @@ enum NotificationType {
   LIKE
   COMMENT
   FOLLOW
+}
+
+model Chat {
+  id        String     @id @default(uuid())
+  users     ChatUser[]
+  messages  Message[]
+  createdAt DateTime   @default(now())
+}
+
+model ChatUser {
+  id     String @id @default(uuid())
+  chatId String
+  userId String
+  chat   Chat   @relation(fields: [chatId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+model Message {
+  id        String      @id @default(uuid())
+  chatId    String
+  senderId  String
+  type      MessageType @default(TEXT)
+  content   String?
+  media     MediaType?
+  mediaUrl  String?
+  createdAt DateTime    @default(now())
+  seen      Boolean     @default(false)
+
+  chat   Chat @relation(fields: [chatId], references: [id])
+  sender User @relation("MessageSender", fields: [senderId], references: [id])
+}
+
+enum MessageType {
+  TEXT
+  MEDIA
+  SYSTEM
+}
+
+enum MediaType {
+  IMAGE
+  AUDIO
+  VIDEO
+  FILE
 }
