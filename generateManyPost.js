@@ -26,4 +26,4 @@ async function createPosts() {
   }
 }
 
-createPosts();
+// createPosts();
