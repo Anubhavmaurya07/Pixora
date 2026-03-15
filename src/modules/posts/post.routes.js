@@ -1,11 +1,12 @@
 const { verifyJWT } = require("../../middlewares/auth.middleware");
+const uploadToCloundinary = require("../../middlewares/upload.middleware");
 const { createPost, getSinglePost, getAllPostOfUser, deletePost, updatePost } = require("./post.controller");
 
 const postRouter = require("express").Router();
 
 
 postRouter.use(verifyJWT);
-postRouter.post("/create-post", createPost);
+postRouter.post("/create-post",uploadToCloundinary("file", 1),createPost);
 postRouter.get("/single-post/:id", getSinglePost);
 postRouter.get("/user-all-post", getAllPostOfUser);
 postRouter.delete("/delete-post/:id", deletePost);
